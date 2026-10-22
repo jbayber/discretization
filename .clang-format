@@ -1,0 +1,14 @@
+
+Language: Cpp
+Standard: "c++20"
+UseTab: Never
+DerivePointerAlignment: false
+PointerAlignment: Right
+ColumnLimit: 120
+IncludeBlocks: Preserve
+SeparateDefinitionBlocks: Always
+AllowShortFunctionsOnASingleLine: All
+EmptyLineBeforeAccessModifier: LogicalBlock
+BinPackArguments: false
+AllowShortLambdasOnASingleLine: All
+...
