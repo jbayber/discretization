@@ -125,5 +125,5 @@ Resolved with the user while drafting:
 - Delivery: a new follow-up spec, not an amendment to best-factor-search.
 
 Remaining:
-- **Should `calculate_discretization_factor` and `discretize` also get float64 versions?** This spec leaves them out to keep the change focused. Adding them would change Python results for float64 and list inputs in many existing tests, for example the imperial factor for `[0.4, 1.6, -2.5]`. That would need its own regression list. Proposed as a follow-up spec.
+- **Should `calculate_discretization_factor` and `discretize` also get float64 versions?** **Answered at the start of `/implement-spec`: no, only `best_discretization_factor` in this run.** This spec leaves them out to keep the change focused. Adding them would change Python results for float64 and list inputs in many existing tests, for example the imperial factor for `[0.4, 1.6, -2.5]`. That would need its own regression list. Proposed as a follow-up spec.
 - **Order:** `/implement-spec` branches from `main`, so merge `feature/best-factor-search` into `main` first.
