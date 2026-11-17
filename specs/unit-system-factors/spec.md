@@ -23,41 +23,41 @@ For a float32 input `v` (converted to `double`) and a candidate factor `f`:
 
 Metric (default):
 
-- [ ] `calculate_discretization_factor({0.1, 2.5, -3.7}, 0.01)` → `10`
-- [ ] `calculate_discretization_factor({1.234}, 0.001)` → `1000`, and with `epsilon = 0.005` → `100` (smallest factor that fits, not the exact one)
-- [ ] `calculate_discretization_factor({3, -7, 0}, 0.01)` → `1`
-- [ ] `calculate_discretization_factor({1/3}, 1e-6)` → `1000000`
-- [ ] Empty input → factor `1`, and `discretize` returns an empty result (both systems)
-- [ ] `discretize({0.4, 1.6, -2.5}, 0.01)` → `{4, 16, -25}`
-- [ ] `discretize({0.0, 1.2, 1.7, -1.2, -1.7}, 0.5)` → `{0, 1, 2, -1, -2}` (factor 1)
-- [ ] `discretize({0.5, 1.5, 2.5, -0.5, -2.5}, 0.5)` → `{1, 2, 3, -1, -3}` (factor 1, halfway away from zero)
-- [ ] Omitting the unit system gives the same result as passing `Metric` explicitly
+- [x] `calculate_discretization_factor({0.1, 2.5, -3.7}, 0.01)` → `10`
+- [x] `calculate_discretization_factor({1.234}, 0.001)` → `1000`, and with `epsilon = 0.005` → `100` (smallest factor that fits, not the exact one)
+- [x] `calculate_discretization_factor({3, -7, 0}, 0.01)` → `1`
+- [x] `calculate_discretization_factor({1/3}, 1e-6)` → `1000000`
+- [x] Empty input → factor `1`, and `discretize` returns an empty result (both systems)
+- [x] `discretize({0.4, 1.6, -2.5}, 0.01)` → `{4, 16, -25}`
+- [x] `discretize({0.0, 1.2, 1.7, -1.2, -1.7}, 0.5)` → `{0, 1, 2, -1, -2}` (factor 1)
+- [x] `discretize({0.5, 1.5, 2.5, -0.5, -2.5}, 0.5)` → `{1, 2, 3, -1, -3}` (factor 1, halfway away from zero)
+- [x] Omitting the unit system gives the same result as passing `Metric` explicitly
 
 Imperial:
 
-- [ ] `{0.3125}` (5/16), `1e-6` → `16`; `discretize` → `{5}`
-- [ ] `{1/3}`, `1e-6` → `3`; `discretize` → `{1}`
-- [ ] `{7/12}`, `1e-6` → `12`; `discretize` → `{7}`
-- [ ] `{2.25, 0.5}`, `1e-6` → `4`; `discretize` → `{9, 2}`
-- [ ] `{1/3, 0.25}`, `1e-6` → `12`; `discretize` → `{4, 3}`
-- [ ] `{0.5, 0.25, 0.3125}`, `1e-6` → `16`; `discretize` → `{8, 4, 5}`
-- [ ] `{0.1, 2.5, -3.7}`, `0.01` → `48`; `discretize` → `{5, 120, -178}`
-- [ ] `{0.4, 1.6, -2.5}`, `0.01` → `32`; `discretize` → `{13, 51, -80}`
+- [x] `{0.3125}` (5/16), `1e-6` → `16`; `discretize` → `{5}`
+- [x] `{1/3}`, `1e-6` → `3`; `discretize` → `{1}`
+- [x] `{7/12}`, `1e-6` → `12`; `discretize` → `{7}`
+- [x] `{2.25, 0.5}`, `1e-6` → `4`; `discretize` → `{9, 2}`
+- [x] `{1/3, 0.25}`, `1e-6` → `12`; `discretize` → `{4, 3}`
+- [x] `{0.5, 0.25, 0.3125}`, `1e-6` → `16`; `discretize` → `{8, 4, 5}`
+- [x] `{0.1, 2.5, -3.7}`, `0.01` → `48`; `discretize` → `{5, 120, -178}`
+- [x] `{0.4, 1.6, -2.5}`, `0.01` → `32`; `discretize` → `{13, 51, -80}`
 
 Errors (both functions, both systems unless stated):
 
-- [ ] `epsilon ≤ 0` or NaN → C++ `std::invalid_argument`, Python `ValueError`
-- [ ] Any NaN or ±inf value → C++ `std::invalid_argument`, Python `ValueError`
-- [ ] No candidate fits: `{0.1}`, `1e-12`, metric → C++ `std::out_of_range`, Python `ValueError`
-- [ ] `round(v · f)` overflows `int32` before a candidate fits: `{3e9}`, `0.5` → C++ `std::out_of_range`, Python `ValueError`. The search stops at the first overflow, because larger factors only make it worse.
-- [ ] Python: an unknown `unit_system` (for example `"cubits"`) → `ValueError`
+- [x] `epsilon ≤ 0` or NaN → C++ `std::invalid_argument`, Python `ValueError`
+- [x] Any NaN or ±inf value → C++ `std::invalid_argument`, Python `ValueError`
+- [x] No candidate fits: `{0.1}`, `1e-12`, metric → C++ `std::out_of_range`, Python `ValueError`
+- [x] `round(v · f)` overflows `int32` before a candidate fits: `{3e9}`, `0.5` → C++ `std::out_of_range`, Python `ValueError`. The search stops at the first overflow, because larger factors only make it worse.
+- [x] Python: an unknown `unit_system` (for example `"cubits"`) → `ValueError`
 
 General:
 
-- [ ] Property: for 10 000 random values (fixed seed, uniform in [−1000, 1000]) and `epsilon ∈ {0.1, 0.01, 0.001}`, for both systems: the returned factor fits, `|discretize(v)[i] / f − v[i]| ≤ epsilon` for every `i`, and the previous candidate in the list does not fit (or `f` is the first candidate)
-- [ ] Vector and raw-buffer C++ versions give identical results for every case above
-- [ ] README API section is updated: signatures, the `UnitSystem` enum, both candidate lists, the error behavior, and the placeholder note removed
-- [ ] `make check` and `make install && make test` pass
+- [x] Property: for 10 000 random values (fixed seed, uniform in [−1000, 1000]) and `epsilon ∈ {0.1, 0.01, 0.001}`, for both systems: the returned factor fits, `|discretize(v)[i] / f − v[i]| ≤ epsilon` for every `i`, and the previous candidate in the list does not fit (or `f` is the first candidate)
+- [x] Vector and raw-buffer C++ versions give identical results for every case above
+- [x] README API section is updated: signatures, the `UnitSystem` enum, both candidate lists, the error behavior, and the placeholder note removed
+- [x] `make check` and `make install && make test` pass
 
 ## API
 
