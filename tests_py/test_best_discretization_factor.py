@@ -257,8 +257,11 @@ class TestBestDiscretizationFactorInputTypes:
             "series": series,
             "dataframe": dataframe["x"],
         }[kind]
+        # float32 data keeps the float32 path; lists, float64 arrays and pandas
+        # float64 data run in float64 (specs/best-factor-float64).
+        dtype = np.float32 if kind in ("float32", "strided") else np.float64
         expected = best_discretization_factor(
-            np.array(Constants.VALUES, dtype=np.float32), unit_system, 10
+            np.array(Constants.VALUES, dtype=dtype), unit_system, 10
         )
         actual = best_discretization_factor(values, unit_system, 10)
         assert actual.factor == factor

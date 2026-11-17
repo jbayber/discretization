@@ -204,3 +204,147 @@ class Constants:
     HUGE_LOW = -1e6
     HUGE_HIGH = 1e6
     HUGE_FACTOR = 1000
+
+    # ---- best_discretization_factor on float64 (specs/best-factor-float64) ----
+
+    # float16(0.1) widened to float64.
+    FLOAT16_TENTH = 0.0999755859375
+
+    # Selection examples on float64 input, same layout as BEST_FACTOR_EXAMPLES.
+    # In float64, round(v * f) / f hits v exactly for "nice" values, so the
+    # error is 0 and the smallest factor wins.
+    BEST_FACTOR_FLOAT64_EXAMPLES = [
+        # float32 gives 10 with 1.64e-8.
+        ("mixed-budget-1000", [0.1, 2.5, -3.7], "metric", 1000, 10, 0.0, "metric"),
+        # float32 gives 1e8.
+        ("mixed-default", [0.1, 2.5, -3.7], "metric", None, 10, 0.0, "metric"),
+        ("tenth-metric", [0.1], "metric", None, 10, 0.0, "metric"),
+        # float32 gives 134217728, imperial.
+        ("tenth-both", [0.1], None, None, 10, 0.0, "metric"),
+        # float32 gives 16777216, imperial.
+        ("both-0.3", [0.3], None, None, 10, 0.0, "metric"),
+        ("1.234", [1.234], "metric", None, 1000, 0.0, "metric"),
+        ("cm-inches", [12.7, 2.54, 30.48], None, None, 100, 0.0, "metric"),
+        ("binary-fractions", [0.375, 1.5625, 2.75], None, None, 16, 0.0, "imperial"),
+        ("third", [1 / 3], "imperial", 100, 3, 0.0, "imperial"),
+        ("both-third", [1 / 3], None, None, 3, 0.0, "imperial"),
+        ("third-quarter", [1 / 3, 0.25], "imperial", 100, 12, 0.0, "imperial"),
+        ("both-7/12", [7 / 12], None, None, 12, 0.0, "imperial"),
+        (
+            "values-imperial-10",
+            [0.4, 1.6, -2.5],
+            "imperial",
+            10,
+            8,
+            0.016666666666666646,
+            "imperial",
+        ),
+        ("values-metric-10", [0.4, 1.6, -2.5], "metric", 10, 10, 0.0, "metric"),
+        ("values-both-10", [0.4, 1.6, -2.5], None, 10, 10, 0.0, "metric"),
+        (
+            "max-factor-one",
+            [0.4, 1.6, -2.5],
+            None,
+            1,
+            1,
+            0.4333333333333333,
+            "metric",
+        ),
+        # Same results as float32 where the input is exact in both.
+        ("eighth-budget-100", [0.125], "metric", 100, 100, 0.005, "metric"),
+        ("eighth-default", [0.125], "metric", None, 1000, 0.0, "metric"),
+        ("max-factor-50", [0.125], "metric", 50, 10, 0.024999999999999994, "metric"),
+        ("half-quarter-tie", [0.5, 0.25], "metric", None, 100, 0.0, "metric"),
+        ("budget-one", [2.5], "metric", 1, 1, 0.5, "metric"),
+        ("integers", [3.0, -7.0, 0.0], "metric", None, 1, 0.0, "metric"),
+        ("integers-imperial", [3.0, -7.0, 0.0], "imperial", None, 1, 0.0, "metric"),
+        ("integers-both", [3.0, -7.0, 0.0], None, None, 1, 0.0, "metric"),
+        ("5/16", [0.3125], "imperial", 1000, 16, 0.0, "imperial"),
+        ("overflow-cutoff", [1e9], "metric", None, 1, 0.0, "metric"),
+        ("overflow-cutoff-both", [1e9], None, None, 1, 0.0, "metric"),
+        # Edge cases.
+        ("negative-eighth", [-0.125], "metric", None, 1000, 0.0, "metric"),
+        ("negative-5/16", [-0.3125], "imperial", None, 16, 0.0, "imperial"),
+        ("subnormal", [5e-324], None, None, 1, 5e-324, "metric"),
+        ("subnormal-metric", [5e-324], "metric", None, 1, 5e-324, "metric"),
+        ("subnormal-imperial", [5e-324], "imperial", None, 1, 5e-324, "metric"),
+        ("negative-subnormal", [-5e-324], None, None, 1, 5e-324, "metric"),
+        ("above-2^24", [16_777_217.0], None, None, 1, 0.0, "metric"),
+        ("half-above-2^24", [16_777_217.5], None, None, 2, 0.0, "imperial"),
+        ("float16-tenth", [FLOAT16_TENTH], None, None, 8192, 0.0, "imperial"),
+        (
+            "float16-tenth-imperial",
+            [FLOAT16_TENTH],
+            "imperial",
+            None,
+            8192,
+            0.0,
+            "imperial",
+        ),
+        (
+            "float16-tenth-metric",
+            [FLOAT16_TENTH],
+            "metric",
+            None,
+            1_000_000_000,
+            6.250000517127319e-11,
+            "metric",
+        ),
+        ("int32-limit", [2147483647.0, -2147483647.0], None, None, 1, 0.0, "metric"),
+        (
+            "near-int32-limit",
+            [2147483647.4],
+            None,
+            None,
+            1,
+            0.40000009536743164,
+            "metric",
+        ),
+        ("overflow-half-metric", [1e9, 0.5], "metric", None, 1, 0.25, "metric"),
+        ("overflow-half-imperial", [1e9, 0.5], "imperial", None, 2, 0.0, "imperial"),
+        ("overflow-half-both", [1e9, 0.5], None, None, 2, 0.0, "imperial"),
+    ]
+
+    # |round(v)| > INT32_MAX already at f = 1 (float64 input).
+    BEST_FACTOR_FLOAT64_OVERFLOW_VALUES = [
+        [2147483647.5],
+        [-2147483648.0],
+        [3e9],
+        [0.5, -3e9],
+        [2147483648.0],
+        [1e300],
+        [1e39],
+        [float(np.finfo(np.float64).max)],
+    ]
+    BEST_FACTOR_FLOAT64_NON_FINITE_VALUES = [
+        *NON_FINITE_VALUES,
+        [float("nan")],
+        [float("inf")],
+        [float("-inf")],
+        [3e9, float("nan")],
+    ]
+
+    # Property test on `property_values_float64`: expected factor and result
+    # system for each (unit_system, budget). None: check against the reference
+    # only (the gap to the runner-up is 0.39%, too close to hardcode).
+    BEST_FACTOR_FLOAT64_PROPERTY_EXPECTED = {
+        ("metric", 10): (10, "metric"),
+        ("metric", 1000): (1000, "metric"),
+        ("metric", 1_000_000): (1_000_000, "metric"),
+        ("imperial", 10): (9, "imperial"),
+        ("imperial", 1000): (972, "imperial"),
+        ("imperial", 1_000_000): (995_328, "imperial"),
+        (None, 10): (10, "metric"),
+        (None, 1000): (1000, "metric"),
+        (None, 1_000_000): None,
+    }
+
+    # Benchmarks: expected result on `large_values_float64` per system choice.
+    BEST_FACTOR_LARGE_FLOAT64_EXPECTED = {
+        None: (2048, "imperial"),
+        "metric": (1000, "metric"),
+        "imperial": (2048, "imperial"),
+    }
+
+    # Number of values for the copy (allocation) tests.
+    ALLOCATION_SIZE = 1_000_000
