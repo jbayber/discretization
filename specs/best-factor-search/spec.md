@@ -22,43 +22,43 @@ For a float32 input `v` (converted to `double`) and a candidate factor `f`:
 
 Selection (each line gives values, system, `max_factor` and the expected `factor`; errors are checked to within 1e-12 relative):
 
-- [ ] `{0.125}`, Metric, 100 → factor `100`, error `0.005`
-- [ ] `{0.125}`, Metric, default budget → `1000`, error `0`
-- [ ] `{0.5, 0.25}`, Metric, default → `100`, error `0` (tie with 1000, 10⁴ … resolved to the smallest)
-- [ ] `{0.1, 2.5, -3.7}`, Metric, 1000 → `10` (100 and 1000 tie exactly, so the smallest wins)
-- [ ] `{2.5}`, Metric, 1 → `1`, error `0.5`
-- [ ] `{3, -7, 0}`, Metric, default → `1`, error `0`
-- [ ] `{0.3125}`, Imperial, 1000 → `16`, error `0`
-- [ ] `{1/3}`, Imperial, 100 → `3`
-- [ ] `{1/3, 0.25}`, Imperial, 100 → `12`
-- [ ] `{7/12}`, Imperial, 100 → `12`
-- [ ] `{0.4, 1.6, -2.5}`, Imperial, 10 → `8`, error `≈ 0.0166667`; the same input with Metric, 10 → `10`
-- [ ] Both systems (no `unit_system`): `{1/3}`, 100 → `3`, Imperial; `{0.3}`, 100 → `10`, Metric; `{0.3125}`, default → `16`, Imperial
-- [ ] Both systems, `{0.3}`, default budget → `16777216` (2²⁴, Imperial), error `0`. This documents that float32 values are dyadic, so with an unlimited budget the exact representation wins.
-- [ ] `{1e9}`, Metric, default → `1` (larger factors overflow `int32`, so they're excluded rather than raising an error)
+- [x] `{0.125}`, Metric, 100 → factor `100`, error `0.005`
+- [x] `{0.125}`, Metric, default budget → `1000`, error `0`
+- [x] `{0.5, 0.25}`, Metric, default → `100`, error `0` (tie with 1000, 10⁴ … resolved to the smallest)
+- [x] `{0.1, 2.5, -3.7}`, Metric, 1000 → `10` (100 and 1000 tie exactly, so the smallest wins)
+- [x] `{2.5}`, Metric, 1 → `1`, error `0.5`
+- [x] `{3, -7, 0}`, Metric, default → `1`, error `0`
+- [x] `{0.3125}`, Imperial, 1000 → `16`, error `0`
+- [x] `{1/3}`, Imperial, 100 → `3`
+- [x] `{1/3, 0.25}`, Imperial, 100 → `12`
+- [x] `{7/12}`, Imperial, 100 → `12`
+- [x] `{0.4, 1.6, -2.5}`, Imperial, 10 → `8`, error `≈ 0.0166667`; the same input with Metric, 10 → `10`
+- [x] Both systems (no `unit_system`): `{1/3}`, 100 → `3`, Imperial; `{0.3}`, 100 → `10`, Metric; `{0.3125}`, default → `16`, Imperial
+- [x] Both systems, `{0.3}`, default budget → `16777216` (2²⁴, Imperial), error `0`. This documents that float32 values are dyadic, so with an unlimited budget the exact representation wins.
+- [x] `{1e9}`, Metric, default → `1` (larger factors overflow `int32`, so they're excluded rather than raising an error)
 
 Errors and edge cases:
 
-- [ ] Empty input → factor `1`, error `0`, `Metric`
-- [ ] Any NaN or ±inf value → C++ `std::invalid_argument`, Python `ValueError`
-- [ ] `max_factor < 1`, or `num_threads < 0` → `std::invalid_argument`, Python `ValueError`
-- [ ] No candidate is considered because `|round(v)| > INT32_MAX` already at `f = 1` (`{3e9}`) → `std::out_of_range`, Python `ValueError`
+- [x] Empty input → factor `1`, error `0`, `Metric`
+- [x] Any NaN or ±inf value → C++ `std::invalid_argument`, Python `ValueError`
+- [x] `max_factor < 1`, or `num_threads < 0` → `std::invalid_argument`, Python `ValueError`
+- [x] No candidate is considered because `|round(v)| > INT32_MAX` already at `f = 1` (`{3e9}`) → `std::out_of_range`, Python `ValueError`
 
 Parallelism and determinism:
 
-- [ ] The result (factor, and the error **bit-identical**) is the same for `num_threads ∈ {0 (auto), 1, 2, 3, 8, 64}` on 1M random values (fixed seed, uniform in [−1000, 1000]), for each system
-- [ ] With `num_threads = 0` (auto), inputs below `100 000` values run on the calling thread and spawn no threads
-- [ ] Property: on 10 000 random values (fixed seed) for budgets `{10, 1000, 10⁶}` and each system, the result equals a brute-force reference (a straightforward serial loop over all candidates, written in the test)
+- [x] The result (factor, and the error **bit-identical**) is the same for `num_threads ∈ {0 (auto), 1, 2, 3, 8, 64}` on 1M random values (fixed seed, uniform in [−1000, 1000]), for each system
+- [x] With `num_threads = 0` (auto), inputs below `100 000` values run on the calling thread and spawn no threads
+- [x] Property: on 10 000 random values (fixed seed) for budgets `{10, 1000, 10⁶}` and each system, the result equals a brute-force reference (a straightforward serial loop over all candidates, written in the test)
 
 Performance (measured by the benchmarks and recorded in `report.md`; not an asserted test, because timing on CI is unreliable):
 
-- [ ] On 50M float32 values (fixed seed, uniform in [−1e6, 1e6]), Metric, default budget: auto threads is **≥ 3×** faster than `num_threads = 1` on this 8-core machine
-- [ ] Single pass: each chunk of data is read once and accumulates the errors of **all** candidates, rather than doing one pass per candidate
+- [x] On 50M float32 values (fixed seed, uniform in [−1e6, 1e6]), Metric, default budget: auto threads is **≥ 3×** faster than `num_threads = 1` on this 8-core machine
+- [x] Single pass: each chunk of data is read once and accumulates the errors of **all** candidates, rather than doing one pass per candidate
 
 Docs:
 
-- [ ] README API section documents the function, the result type, the budget, the tie rule, threading, and the "an unlimited budget favors exact float representation" note
-- [ ] `make check` and `make install && make test` pass
+- [x] README API section documents the function, the result type, the budget, the tie rule, threading, and the "an unlimited budget favors exact float representation" note
+- [x] `make check` and `make install && make test` pass
 
 ## API
 

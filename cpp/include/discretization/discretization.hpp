@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
+#include <optional>
 #include <vector>
 
 namespace discretization {
@@ -37,5 +39,39 @@ std::vector<int> discretize(const std::vector<float> &values, float epsilon,
 // integers to `out`. `out` must point to at least `size` writable ints.
 void discretize(const float *values, std::size_t size, float epsilon, int *out,
                 UnitSystem unit_system = UnitSystem::Metric);
+
+// Result of `best_discretization_factor`.
+struct FactorResult {
+  int factor;             // the winning candidate factor
+  double mean_abs_error;  // err(factor), see below
+  UnitSystem unit_system; // list the factor comes from (Metric for 1, which is in both)
+};
+
+// Searches the candidate factors for the one with the lowest mean absolute error
+//   err(f) = (1/n) * sum |round(v * f) / f - v|
+// computed in double (round: halfway cases away from zero, as in `discretize`).
+//
+// - `unit_system`: the list to search; std::nullopt searches the sorted union of both lists.
+// - `max_factor`: the factor budget (inclusive). Candidates above it, and candidates for which
+//   `|round(v * f)|` overflows int32 for some value, are not considered. Without a budget a
+//   finer grid always wins, since float32 values are exactly representable with a large enough
+//   power of two.
+// - `num_threads`: 0 = auto (calling thread only below 100'000 values, else
+//   std::thread::hardware_concurrency()); otherwise the number of threads, capped to the number
+//   of 65'536-value chunks. The result is bit-identical for any thread count.
+//
+// On an exact tie the smallest factor wins. Empty input returns {1, 0.0, Metric}.
+//
+// Throws std::invalid_argument if `max_factor < 1`, `num_threads < 0`, `unit_system` is not a
+// valid enumerator, or any value is NaN or +-inf. Throws std::out_of_range if no candidate is
+// left, i.e. `|round(v)|` already overflows int32 for some value.
+FactorResult best_discretization_factor(const std::vector<float> &values,
+                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                        int max_factor = std::numeric_limits<int>::max(), int num_threads = 0);
+
+// Raw buffer overload: reads `size` contiguous floats starting at `values`.
+FactorResult best_discretization_factor(const float *values, std::size_t size,
+                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                        int max_factor = std::numeric_limits<int>::max(), int num_threads = 0);
 
 } // namespace discretization

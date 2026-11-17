@@ -3,6 +3,10 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -10,6 +14,7 @@ namespace py = pybind11;
 
 namespace {
 
+using discretization::FactorResult;
 using discretization::UnitSystem;
 
 // `forcecast | c_style`: a contiguous float32 array (e.g. from NumPy or
@@ -65,6 +70,27 @@ py::array_t<int> discretize(const FloatArray &values, float epsilon, const py::o
   return out;
 }
 
+FactorResult best_discretization_factor(const FloatArray &values, const py::object &unit_system,
+                                        std::int64_t max_factor, int num_threads) {
+  if (values.ndim() != 1)
+    throw py::value_error("values must be one-dimensional");
+  const std::optional<UnitSystem> system =
+      unit_system.is_none() ? std::nullopt : std::optional<UnitSystem>(parse_unit_system(unit_system));
+  if (max_factor < 1)
+    throw py::value_error("max_factor must be >= 1");
+  // Every candidate is <= INT32_MAX, so a larger budget means "no budget".
+  const int budget = static_cast<int>(std::min<std::int64_t>(max_factor, std::numeric_limits<int>::max()));
+  const float *data = values.data();
+  const auto size = static_cast<std::size_t>(values.size());
+  try {
+    py::gil_scoped_release release;
+    return discretization::best_discretization_factor(data, size, system, budget, num_threads);
+  } catch (const std::out_of_range &e) {
+    // pybind11 would map std::out_of_range to IndexError.
+    throw py::value_error(e.what());
+  }
+}
+
 } // namespace
 
 PYBIND11_MODULE(_core, m) {
@@ -72,6 +98,15 @@ PYBIND11_MODULE(_core, m) {
   py::enum_<UnitSystem>(m, "UnitSystem", "Family of candidate discretization factors.")
       .value("METRIC", UnitSystem::Metric, "1, 10, 100, ..., 10^9")
       .value("IMPERIAL", UnitSystem::Imperial, "Every 2^a * 3^b that fits in int32");
+  py::class_<FactorResult>(m, "FactorResult", "Result of best_discretization_factor (read-only).")
+      .def_readonly("factor", &FactorResult::factor, "The factor with the lowest mean absolute error.")
+      .def_readonly("mean_abs_error", &FactorResult::mean_abs_error, "Mean absolute error of `factor`.")
+      .def_readonly("unit_system", &FactorResult::unit_system, "The candidate list `factor` comes from.")
+      .def("__repr__", [](const FactorResult &r) {
+        return "FactorResult(factor=" + std::to_string(r.factor) +
+               ", mean_abs_error=" + py::repr(py::float_(r.mean_abs_error)).cast<std::string>() +
+               ", unit_system=" + py::str(py::cast(r.unit_system)).cast<std::string>() + ")";
+      });
   m.def("calculate_discretization_factor",
         &calculate_discretization_factor,
         py::arg("values"),
@@ -84,4 +119,12 @@ PYBIND11_MODULE(_core, m) {
         py::arg("epsilon"),
         py::arg("unit_system") = "metric",
         "Return `values` scaled by the discretization factor and rounded, as an int32 NumPy array.");
+  m.def("best_discretization_factor",
+        &best_discretization_factor,
+        py::arg("values"),
+        py::arg("unit_system") = py::none(),
+        py::arg("max_factor") = std::numeric_limits<int>::max(),
+        py::arg("num_threads") = 0,
+        "Return the candidate factor (up to `max_factor`) with the lowest mean absolute error, as a FactorResult.\n"
+        "`unit_system`: None (both lists), 'metric', 'imperial' or a UnitSystem. `num_threads`: 0 = auto.");
 }
