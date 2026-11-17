@@ -134,6 +134,7 @@ tests_py/
     constants.py                              Shared test data (class Constants)
     conftest.py                               pytest fixtures (NumPy arrays, pandas Series/DataFrame, large benchmark input)
     test_best_discretization_factor.py        class TestBestDiscretizationFactor, ...Result, ...Errors, ...InputTypes, ...Benchmark
+    test_best_discretization_factor_float64.py  class TestBestDiscretizationFactorFloat64, ...DtypeDispatch, ...Copies, ...Float64Errors, ...Float64Benchmark
     test_calculate_discretization_factor.py   class TestCalculateDiscretizationFactor
     test_discretize.py                        class TestDiscretize, TestDiscretizeInputTypes, TestDiscretizeBenchmark
 ```
@@ -214,9 +215,22 @@ FactorResult discretization::best_discretization_factor(const float* values, std
                                                         std::optional<UnitSystem> unit_system = std::nullopt,
                                                         int max_factor = std::numeric_limits<int>::max(),
                                                         int num_threads = 0);
+
+// double versions of best_discretization_factor (same parameters and defaults)
+FactorResult discretization::best_discretization_factor(const std::vector<double>& values,
+                                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                                        int max_factor = std::numeric_limits<int>::max(),
+                                                        int num_threads = 0);
+template <std::same_as<double> T>
+FactorResult discretization::best_discretization_factor(const T* values, std::size_t size,
+                                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                                        int max_factor = std::numeric_limits<int>::max(),
+                                                        int num_threads = 0);
 ```
 
 Each function has a `std::vector` version and a raw-buffer version (pointer and size). The vector version calls the raw-buffer version.
+
+`best_discretization_factor` also has `double` versions; the `float` and `double` versions share one implementation. The `double` raw-buffer version is a constrained template, so `best_discretization_factor(nullptr, 0)` and `float*` arguments still call the `float` version; call it as usual with a `double*` (`T` is deduced). Pass a typed `std::vector<float>` or `std::vector<double>`: a braced list such as `best_discretization_factor({0.1f})` is ambiguous between the two vector versions.
 
 ### Behavior
 
@@ -249,7 +263,12 @@ err(f) = (1/n) · Σ |q / f − v|        (computed in double)
 - **Result:** `FactorResult{factor, mean_abs_error, unit_system}`. `unit_system` is the list the factor comes from; `1` is in both and is reported as `Metric`, also when searching imperial only.
 - **Empty input** gives `{1, 0.0, Metric}`.
 
-**An unlimited budget favors the exact float representation.** Every finite float32 is a dyadic rational, so a large enough power of two represents it exactly. With the default budget, `[0.3]` searched over both lists gives `16777216` (`2^24`, imperial) with error `0`, while `max_factor=100` gives `10` (metric). Set a budget that matches the precision you need.
+**Unknown unit system:** use `unit_system=None` (the default), which searches metric and imperial together and reports which list the factor comes from. This is the recommended choice when you don't know the data's unit system.
+
+**float32 vs float64.** The values are always converted to `double` (exactly) before any arithmetic, but the input type still matters:
+
+- In **float64**, "nice" decimal values hit the same `double` exactly at a small factor (`round(0.3 · 10) / 10 == 0.3`), so the error is exactly `0` and the smallest-factor tie rule gives the intuitive answer: `[0.3]` searched over both lists gives `10` (metric), and `[0.1, 2.5, -3.7]` gives `10`.
+- In **float32**, `0.3f` is really `0.300000011920928955078125`. Every finite float32 is a dyadic rational, so a large enough power of two represents it exactly, and with an unlimited budget the search chases it: `[0.3f]` over both lists gives `16777216` (`2^24`, imperial) with error `0`, and `[0.1f, 2.5f, -3.7f]` in metric gives `10^8`. With `max_factor=100`, `[0.3f]` gives `10` (metric). With float32 data, set a budget that matches the precision you need.
 
 Errors:
 
@@ -261,7 +280,7 @@ Threading and determinism:
 - `num_threads = 0` (default) means auto: inputs below 100 000 values run on the calling thread and spawn no threads; larger inputs use `std::thread::hardware_concurrency()` threads. A positive `num_threads` is used as given. Either way the count is capped to the number of chunks.
 - The data is split into fixed chunks of 65 536 values, independent of the thread count. A first pass computes `max|v|` (for the cutoff) and checks for NaN/inf. A single main pass then reads each chunk once and accumulates the errors of **all** considered candidates. Threads take chunks from a shared counter; the calling thread works too.
 - Per-candidate sums run in index order within a chunk, and the chunk sums are added in chunk order, so the result (including every bit of the error) is the same for any `num_threads`.
-- On 50M values (metric, default budget) on an 8-core Apple machine, auto threads are about 6× faster than `num_threads = 1` (about 20 ms vs 130 ms).
+- On 50M values (metric, default budget) on an 8-core Apple machine, auto threads are about 6× faster than `num_threads = 1` (about 20 ms vs 130 ms for float32, 20 ms vs 100 ms for float64).
 
 Python:
 
@@ -286,6 +305,7 @@ discretize(values, 0.01, unit_system=UnitSystem.IMPERIAL)
 df = pd.DataFrame({"x": [0.4, 1.6, -2.5]})
 discretize(df["x"].to_numpy(np.float32), 0.01)
 
+# float32 input runs in float32
 best_discretization_factor(values, max_factor=10)
 # FactorResult(factor=10, mean_abs_error=9.93410742555767e-09, unit_system=UnitSystem.METRIC)
 r = best_discretization_factor(values, "imperial", 10)
@@ -294,17 +314,31 @@ r = best_discretization_factor(values, "imperial", 10)
     r.mean_abs_error,
     r.unit_system,
 )  # (8, 0.01666666070620219, UnitSystem.IMPERIAL)
-best_discretization_factor([0.3]).factor  # 16777216: unlimited budget, exact float
+
+# lists, float64, float16 and integers run in float64
+best_discretization_factor([0.3]).factor  # 10: exact in double, smallest factor wins
+best_discretization_factor(np.array([0.3], dtype=np.float32)).factor  # 16777216
+best_discretization_factor([0.4, 1.6, -2.5], "imperial", 10).mean_abs_error
+# 0.016666666666666646
+best_discretization_factor(df["x"])  # float64 Series, no copy
+# FactorResult(factor=10, mean_abs_error=0.0, unit_system=UnitSystem.METRIC)
 ```
 
-`best_discretization_factor(values, unit_system=None, max_factor=2**31 - 1, num_threads=0)` returns a read-only `FactorResult` with `.factor` (`int`), `.mean_abs_error` (`float`) and `.unit_system` (`UnitSystem`); it can't be constructed from Python. `unit_system=None` searches both lists. A `max_factor` above `2**31 - 1` is treated as `2**31 - 1`.
+`best_discretization_factor(values, unit_system=None, max_factor=2**31 - 1, num_threads=0)` returns a read-only `FactorResult` with `.factor` (`int`), `.mean_abs_error` (`float`) and `.unit_system` (`UnitSystem`); it can't be constructed from Python. `unit_system=None` searches both lists and is the recommended choice when the unit system is unknown. A `max_factor` above `2**31 - 1` is treated as `2**31 - 1`.
+
+`best_discretization_factor` dispatches on the input's own dtype (`np.asarray(values).dtype`):
+
+- `float32` (NumPy arrays, strided views, float32 Series) runs the C++ `float` version, with exactly the float32 results.
+- Anything else (`float64`, lists, float64 Series and DataFrame columns, `float16`, integers) runs the C++ `double` version on a float64 array. Nothing is narrowed to float32; float16 and integers up to `2^53` widen exactly.
+- Contiguous `float32` and `float64` arrays are passed **without copying**; other layouts and dtypes are converted once.
+- Non-numeric input raises `TypeError`, as before.
 
 For `calculate_discretization_factor` and `discretize`, `unit_system` defaults to `"metric"`. It accepts `"metric"` / `"imperial"` (case-insensitive) or `UnitSystem.METRIC` / `UnitSystem.IMPERIAL`. Anything else raises `ValueError`.
 
 The Python functions call the raw-buffer C++ versions:
 
-- A contiguous 1-D `float32` NumPy array is passed to C++ **without copying**.
-- Anything else (lists, `float64`, strided views, pandas Series) is converted to that format once. For the fastest path, convert it yourself, for example with `series.to_numpy(np.float32)`.
+- For `calculate_discretization_factor` and `discretize`, a contiguous 1-D `float32` NumPy array is passed to C++ **without copying**. Anything else (lists, `float64`, strided views, pandas Series) is converted to `float32` once. For the fastest path, convert it yourself, for example with `series.to_numpy(np.float32)`.
+- `best_discretization_factor` dispatches on dtype as described above.
 - `discretize` writes its result directly into a new `int32` NumPy array.
 - The GIL is released during the computation.
 - Input that isn't 1-D raises `ValueError`. Both C++ exceptions above surface as `ValueError`.

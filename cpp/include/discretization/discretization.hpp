@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <limits>
 #include <optional>
@@ -53,9 +54,10 @@ struct FactorResult {
 //
 // - `unit_system`: the list to search; std::nullopt searches the sorted union of both lists.
 // - `max_factor`: the factor budget (inclusive). Candidates above it, and candidates for which
-//   `|round(v * f)|` overflows int32 for some value, are not considered. Without a budget a
-//   finer grid always wins, since float32 values are exactly representable with a large enough
-//   power of two.
+//   `|round(v * f)|` overflows int32 for some value, are not considered. Without a budget, float32
+//   data often picks a large power of two, since every float32 value is exactly representable
+//   with a large enough one (`{0.3f}` gives 2^24). In double, "nice" decimal values usually reach
+//   error 0 at a small factor (`{0.3}` gives 10).
 // - `num_threads`: 0 = auto (calling thread only below 100'000 values, else
 //   std::thread::hardware_concurrency()); otherwise the number of threads, capped to the number
 //   of 65'536-value chunks. The result is bit-identical for any thread count.
@@ -73,5 +75,22 @@ FactorResult best_discretization_factor(const std::vector<float> &values,
 FactorResult best_discretization_factor(const float *values, std::size_t size,
                                         std::optional<UnitSystem> unit_system = std::nullopt,
                                         int max_factor = std::numeric_limits<int>::max(), int num_threads = 0);
+
+// `double` versions: same semantics, the values are used as doubles without any conversion to
+// float. Float and double share one implementation. Pass a typed `std::vector` (a braced list such
+// as `{0.1f}` is ambiguous between the two vector overloads).
+FactorResult best_discretization_factor(const std::vector<double> &values,
+                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                        int max_factor = std::numeric_limits<int>::max(), int num_threads = 0);
+
+// Raw buffer overload for doubles. A constrained template, so that `nullptr` (which can't be
+// deduced) and `float *` still resolve to the float overload. Defined for `double` in the library.
+template <std::same_as<double> T>
+FactorResult best_discretization_factor(const T *values, std::size_t size,
+                                        std::optional<UnitSystem> unit_system = std::nullopt,
+                                        int max_factor = std::numeric_limits<int>::max(), int num_threads = 0);
+
+extern template FactorResult best_discretization_factor<double>(const double *, std::size_t, std::optional<UnitSystem>,
+                                                                int, int);
 
 } // namespace discretization

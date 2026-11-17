@@ -290,7 +290,9 @@ The helpers `ENUMS`, `_assert_error` and `_assert_identical` are copied into the
 
 ```python
 dtype = np.float32 if kind in ("float32", "strided") else np.float64
-expected = best_discretization_factor(np.array(Constants.VALUES, dtype=dtype), unit_system, 10)
+expected = best_discretization_factor(
+    np.array(Constants.VALUES, dtype=dtype), unit_system, 10
+)
 ```
 
 The parametrized expectations 10/10/8 stay; the planner verified them in float64.

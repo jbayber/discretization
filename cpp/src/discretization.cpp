@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -234,8 +235,14 @@ std::uint64_t SpawnedThreadCount() { return g_spawned_threads.load(std::memory_o
 
 } // namespace detail
 
-FactorResult best_discretization_factor(const float *values, std::size_t size, std::optional<UnitSystem> unit_system,
-                                        int max_factor, int num_threads) {
+namespace {
+
+// Shared implementation of every `best_discretization_factor` overload. Only the element type
+// differs: each value is converted to double (exactly) before any arithmetic.
+template <typename T>
+FactorResult BestFactor(const T *values, std::size_t size, std::optional<UnitSystem> unit_system, int max_factor,
+                        int num_threads) {
+  static_assert(std::is_floating_point_v<T>);
   using detail::kChunkSize;
 
   // Validate the arguments before anything else (including the empty-input shortcut).
@@ -255,15 +262,15 @@ FactorResult best_discretization_factor(const float *values, std::size_t size, s
   };
 
   // Pre-pass: max |v| per chunk (for the overflow cutoff) and a non-finite flag.
-  std::vector<float> chunk_max(num_chunks, 0.0f);
+  std::vector<T> chunk_max(num_chunks, T{0});
   std::vector<unsigned char> chunk_bad(num_chunks, 0);
   ForEachChunk(num_chunks, threads, [&](std::size_t c) {
     const auto [begin, end] = chunk_bounds(c);
-    float m = 0.0f;
+    T m = T{0};
     bool bad = false;
     for (std::size_t i = begin; i < end; ++i) {
-      const float a = std::abs(values[i]);
-      bad |= !(a <= std::numeric_limits<float>::max()); // NaN or inf
+      const T a = std::abs(values[i]);
+      bad |= !(a <= std::numeric_limits<T>::max()); // NaN or inf
       m = a > m ? a : m;
     }
     chunk_max[c] = m;
@@ -320,7 +327,28 @@ FactorResult best_discretization_factor(const float *values, std::size_t size, s
   return {factor, best_error, IsMetricCandidate(factor) ? UnitSystem::Metric : UnitSystem::Imperial};
 }
 
+} // namespace
+
+FactorResult best_discretization_factor(const float *values, std::size_t size, std::optional<UnitSystem> unit_system,
+                                        int max_factor, int num_threads) {
+  return BestFactor(values, size, unit_system, max_factor, num_threads);
+}
+
 FactorResult best_discretization_factor(const std::vector<float> &values, std::optional<UnitSystem> unit_system,
+                                        int max_factor, int num_threads) {
+  return best_discretization_factor(values.data(), values.size(), unit_system, max_factor, num_threads);
+}
+
+template <std::same_as<double> T>
+FactorResult best_discretization_factor(const T *values, std::size_t size, std::optional<UnitSystem> unit_system,
+                                        int max_factor, int num_threads) {
+  return BestFactor(values, size, unit_system, max_factor, num_threads);
+}
+
+template FactorResult best_discretization_factor<double>(const double *, std::size_t, std::optional<UnitSystem>, int,
+                                                         int);
+
+FactorResult best_discretization_factor(const std::vector<double> &values, std::optional<UnitSystem> unit_system,
                                         int max_factor, int num_threads) {
   return best_discretization_factor(values.data(), values.size(), unit_system, max_factor, num_threads);
 }
