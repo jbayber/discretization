@@ -187,29 +187,57 @@ GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `make
 C++ (`#include <discretization/discretization.hpp>`):
 
 ```cpp
-int discretization::calculate_discretization_factor(const std::vector<float>& values, float epsilon);
-int discretization::calculate_discretization_factor(const float* values, std::size_t size, float epsilon);
+enum class discretization::UnitSystem { Metric, Imperial };
 
-std::vector<int> discretization::discretize(const std::vector<float>& values, float epsilon);
-void discretization::discretize(const float* values, std::size_t size, float epsilon, int* out);
+int discretization::calculate_discretization_factor(const std::vector<float>& values, float epsilon,
+                                                    UnitSystem unit_system = UnitSystem::Metric);
+int discretization::calculate_discretization_factor(const float* values, std::size_t size, float epsilon,
+                                                    UnitSystem unit_system = UnitSystem::Metric);
+
+std::vector<int> discretization::discretize(const std::vector<float>& values, float epsilon,
+                                            UnitSystem unit_system = UnitSystem::Metric);
+void discretization::discretize(const float* values, std::size_t size, float epsilon, int* out,
+                                UnitSystem unit_system = UnitSystem::Metric);
 ```
 
 Each function has a `std::vector` version and a raw-buffer version (pointer and size). The vector version calls the raw-buffer version.
+
+### Behavior
+
+`calculate_discretization_factor` returns the **smallest** candidate factor `f` of the chosen unit system that *fits* the values. For a value `v` (converted to `double`), let `q = round(v · f)`, with halfway cases rounded away from zero. `f` fits if `|q / f − v| ≤ epsilon` for every value. `discretize` returns `q` for every value, using exactly that factor. Empty input gives factor `1` and an empty result.
+
+Candidate factors, tried in ascending order:
+
+- **Metric** (default): `1, 10, 100, …, 10^9`.
+- **Imperial**: every `2^a · 3^b` that fits in `int32` (328 numbers, up to `2066242608`): `1, 2, 3, 4, 6, 8, 9, 12, 16, 18, 24, 27, 32, 36, 48, 54, 64, 72, 81, 96, …`. This covers binary inch fractions (1/2 … 1/64 in), 12 in/ft, 3 ft/yd, 36 in/yd and 16 oz/lb.
+
+Errors:
+
+- `epsilon` that is NaN or `≤ 0`, or any NaN or ±inf value: `std::invalid_argument` (Python `ValueError`).
+- No candidate fits, or `round(v · f)` overflows `int32` before a candidate fits: `std::out_of_range` (Python `ValueError`). The search stops at the first overflow, because larger factors only make it worse.
+
+Every finite float32 is a dyadic rational, so in imperial a fitting power of two always exists unless the values overflow (for example, `0.1f` fits at `2^27`). "No candidate fits" is therefore mainly a metric error, and imperial fails mainly through overflow.
 
 Python:
 
 ```python
 import numpy as np
 import pandas as pd
-from discretization import calculate_discretization_factor, discretize
+from discretization import UnitSystem, calculate_discretization_factor, discretize
 
 values = np.array([0.4, 1.6, -2.5], dtype=np.float32)
-discretize(values, 0.01)  # array([ 0,  2, -3], dtype=int32)
-calculate_discretization_factor(values, 0.01)  # 1
+calculate_discretization_factor(values, 0.01)  # 10
+discretize(values, 0.01)  # array([  4,  16, -25], dtype=int32)
+
+calculate_discretization_factor(values, 0.01, "imperial")  # 32
+# array([ 13,  51, -80], dtype=int32)
+discretize(values, 0.01, unit_system=UnitSystem.IMPERIAL)
 
 df = pd.DataFrame({"x": [0.4, 1.6, -2.5]})
 discretize(df["x"].to_numpy(np.float32), 0.01)
 ```
+
+`unit_system` defaults to `"metric"`. It accepts `"metric"` / `"imperial"` (case-insensitive) or `UnitSystem.METRIC` / `UnitSystem.IMPERIAL`. Anything else raises `ValueError`.
 
 The Python functions call the raw-buffer C++ versions:
 
@@ -217,9 +245,7 @@ The Python functions call the raw-buffer C++ versions:
 - Anything else (lists, `float64`, strided views, pandas Series) is converted to that format once. For the fastest path, convert it yourself, for example with `series.to_numpy(np.float32)`.
 - The result is written directly into a new `int32` NumPy array.
 - The GIL is released during the computation.
-- Input that isn't 1-D raises `ValueError`.
-
-Current behavior is a placeholder. The factor is always `1`. `discretize` rounds each value to the nearest integer, and rounds halfway cases away from zero (`2.5` → `3`, `-2.5` → `-3`).
+- Input that isn't 1-D raises `ValueError`. Both C++ exceptions above surface as `ValueError`.
 
 ## Agent workflow
 
