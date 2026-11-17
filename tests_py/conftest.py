@@ -1,3 +1,4 @@
+import tracemalloc
 from typing import Callable
 
 import numpy as np
@@ -100,3 +101,72 @@ def mean_abs_error() -> Callable[[np.ndarray, int], float]:
         return float(np.mean(np.abs(q / factor - v)))
 
     return _mean_abs_error
+
+
+def _exact_float64(seed: int, size: int) -> np.ndarray:
+    """Portable float64 data in [-1000, 1000).
+
+    Integers from the generator scaled by one IEEE multiplication, so the values
+    don't depend on platform-specific floating point paths.
+    """
+    rng = np.random.default_rng(seed=seed)
+    return rng.integers(-(2**52), 2**52, size, dtype=np.int64) * (1000.0 / 2**52)
+
+
+@pytest.fixture(scope="session")
+def property_values_float64() -> np.ndarray:
+    return _exact_float64(Constants.PROPERTY_SEED, Constants.PROPERTY_SIZE)
+
+
+@pytest.fixture(scope="session")
+def determinism_values_float64() -> np.ndarray:
+    return _exact_float64(Constants.DETERMINISM_SEED, Constants.DETERMINISM_SIZE)
+
+
+@pytest.fixture(scope="session")
+def large_values_float64() -> np.ndarray:
+    rng = np.random.default_rng(seed=0)
+    return rng.uniform(-1e6, 1e6, Constants.BENCHMARK_SIZE)
+
+
+@pytest.fixture(scope="session")
+def huge_values_float64() -> np.ndarray:
+    rng = np.random.default_rng(seed=Constants.HUGE_SEED)
+    return rng.uniform(Constants.HUGE_LOW, Constants.HUGE_HIGH, Constants.HUGE_SIZE)
+
+
+@pytest.fixture(scope="session")
+def mean_abs_error_float64() -> Callable[[np.ndarray, int], float]:
+    """Reference mean absolute error of float64 `values` discretized with `factor`.
+
+    q = round(v * f) halfway away from zero, err = mean(|q / f - v|), in double.
+    """
+
+    def _mean_abs_error(values, factor: int) -> float:
+        v = np.asarray(values, dtype=np.float64)
+        q = round_half_away_from_zero(v * factor)
+        return float(np.mean(np.abs(q / factor - v)))
+
+    return _mean_abs_error
+
+
+@pytest.fixture(scope="session")
+def peak_allocation() -> Callable[..., int]:
+    """Peak traced allocation (bytes) while running `func(*args, **kwargs)`.
+
+    NumPy reports its data buffers to tracemalloc, so a conversion copy of the
+    input shows up here while a zero-copy call stays near 0.
+    """
+
+    def _peak_allocation(func, *args, **kwargs) -> int:
+        tracemalloc.start()
+        try:
+            tracemalloc.reset_peak()
+            before, _ = tracemalloc.get_traced_memory()
+            func(*args, **kwargs)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        return peak - before
+
+    return _peak_allocation

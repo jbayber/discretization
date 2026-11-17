@@ -27,18 +27,18 @@ These are unchanged from best-factor-search, with `v` now being the input value 
 
 Float64 selection. These go through the C++ `double` versions and Python `float64` input. Errors are checked with `==` when the expected value is 0, otherwise with a relative tolerance of 1e-12. M = Metric, I = Imperial, B = both lists (`unit_system` omitted/`None`), D = default budget.
 
-- [ ] `{0.1, 2.5, -3.7}`, M, 1000 → `10`, error `0` (float32 gives 1.64e-8)
-- [ ] `{0.1, 2.5, -3.7}`, M, D → `10`, error `0` (float32 gives 10⁸)
-- [ ] `{0.1}`, M, D → `10`; `{0.1}`, B, D → `10`, Metric (float32 gives 134217728, Imperial)
-- [ ] `{0.3}`, B, D → `10`, Metric, error `0` (float32 gives 16777216, Imperial)
-- [ ] `{1.234}`, M, D → `1000`, error `0`
-- [ ] `{12.7, 2.54, 30.48}`, B, D → `100`, Metric, error `0`
-- [ ] `{0.375, 1.5625, 2.75}`, B, D → `16`, Imperial, error `0`
-- [ ] `{1/3}`, I, 100 → `3`, error `0`; `{1/3}`, B, D → `3`, Imperial
-- [ ] `{1/3, 0.25}`, I, 100 → `12`, error `0`; `{7/12}`, B, D → `12`, Imperial
-- [ ] `{0.4, 1.6, -2.5}`: I, 10 → `8`, error `0.016666666666666646`; M, 10 → `10`, error `0`; B, 10 → `10`, Metric
-- [ ] The same results as float32 where the input is exactly representable in both: `{0.125}` M 100 → `100` (error ≈ 0.005); `{0.125}` M D → `1000`; `{0.5, 0.25}` M D → `100`; `{2.5}` M 1 → `1` (0.5); `{3, -7, 0}` → `1`; `{0.3125}` I 1000 → `16`; `{1e9}` M D → `1`
-- [ ] Errors and edge cases in float64:
+- [x] `{0.1, 2.5, -3.7}`, M, 1000 → `10`, error `0` (float32 gives 1.64e-8)
+- [x] `{0.1, 2.5, -3.7}`, M, D → `10`, error `0` (float32 gives 10⁸)
+- [x] `{0.1}`, M, D → `10`; `{0.1}`, B, D → `10`, Metric (float32 gives 134217728, Imperial)
+- [x] `{0.3}`, B, D → `10`, Metric, error `0` (float32 gives 16777216, Imperial)
+- [x] `{1.234}`, M, D → `1000`, error `0`
+- [x] `{12.7, 2.54, 30.48}`, B, D → `100`, Metric, error `0`
+- [x] `{0.375, 1.5625, 2.75}`, B, D → `16`, Imperial, error `0`
+- [x] `{1/3}`, I, 100 → `3`, error `0`; `{1/3}`, B, D → `3`, Imperial
+- [x] `{1/3, 0.25}`, I, 100 → `12`, error `0`; `{7/12}`, B, D → `12`, Imperial
+- [x] `{0.4, 1.6, -2.5}`: I, 10 → `8`, error `0.016666666666666646`; M, 10 → `10`, error `0`; B, 10 → `10`, Metric
+- [x] The same results as float32 where the input is exactly representable in both: `{0.125}` M 100 → `100` (error ≈ 0.005); `{0.125}` M D → `1000`; `{0.5, 0.25}` M D → `100`; `{2.5}` M 1 → `1` (0.5); `{3, -7, 0}` → `1`; `{0.3125}` I 1000 → `16`; `{1e9}` M D → `1`
+- [x] Errors and edge cases in float64:
   - empty input → `{1, 0, Metric}`;
   - NaN or ±inf → `invalid_argument` / `ValueError`;
   - `{3e9}` and `{1e300}` → `out_of_range` / `ValueError`;
@@ -46,27 +46,27 @@ Float64 selection. These go through the C++ `double` versions and Python `float6
 
 Python dtype dispatch:
 
-- [ ] `float32` input (ndarray, strided float32 view, float32 Series) gives **exactly** the float32 result. `[0.1, 2.5, -3.7]` with M and D → `100000000`, identical to the C++ `float` version.
-- [ ] `float64` ndarray, a plain list, a float64 Series and a DataFrame column give the float64 result: the same input → `10`, error `0`.
-- [ ] `float16` input is widened to float64 (exactly): `np.array([0.1], dtype=np.float16)` (= 0.0999755859375), B, D → `8192`, Imperial, error `0`.
-- [ ] Integer input (`int32`, `int64`) is handled as float64: `[3, -7, 0]` → `1`, error `0`.
-- [ ] Contiguous float32 and contiguous float64 arrays are passed to C++ **without copying**. Other layouts and dtypes are converted once.
+- [x] `float32` input (ndarray, strided float32 view, float32 Series) gives **exactly** the float32 result. `[0.1, 2.5, -3.7]` with M and D → `100000000`, identical to the C++ `float` version.
+- [x] `float64` ndarray, a plain list, a float64 Series and a DataFrame column give the float64 result: the same input → `10`, error `0`.
+- [x] `float16` input is widened to float64 (exactly): `np.array([0.1], dtype=np.float16)` (= 0.0999755859375), B, D → `8192`, Imperial, error `0`.
+- [x] Integer input (`int32`, `int64`) is handled as float64: `[3, -7, 0]` → `1`, error `0`.
+- [x] Contiguous float32 and contiguous float64 arrays are passed to C++ **without copying**. Other layouts and dtypes are converted once.
 
 Parallelism, determinism and accuracy, for float64:
 
-- [ ] On 1M random float64 values (fixed seed, uniform in [−1000, 1000]), each system choice: the factor, and the error **bit-identical**, are the same for `num_threads ∈ {0, 1, 2, 3, 8, 64}`.
-- [ ] With auto threads, fewer than 100 000 float64 values spawn no threads (existing spawn counter).
-- [ ] Property: 10 000 random float64 values (fixed seed), budgets `{10, 1000, 10⁶}` × each system choice. The result equals a brute-force serial reference in double, including exact error equality in C++.
+- [x] On 1M random float64 values (fixed seed, uniform in [−1000, 1000]), each system choice: the factor, and the error **bit-identical**, are the same for `num_threads ∈ {0, 1, 2, 3, 8, 64}`.
+- [x] With auto threads, fewer than 100 000 float64 values spawn no threads (existing spawn counter).
+- [x] Property: 10 000 random float64 values (fixed seed), budgets `{10, 1000, 10⁶}` × each system choice. The result equals a brute-force serial reference in double, including exact error equality in C++.
 
 Performance (measured by benchmarks, recorded in the report, not asserted):
 
-- [ ] 50M float64 values (fixed seed, uniform in [−1e6, 1e6]), Metric, D: auto threads **≥ 3×** faster than `num_threads = 1`. Also record float32 vs float64 time at the same size.
+- [x] 50M float64 values (fixed seed, uniform in [−1e6, 1e6]), Metric, D: auto threads **≥ 3×** faster than `num_threads = 1`. Also record float32 vs float64 time at the same size.
 
 Compatibility and docs:
 
-- [ ] All existing C++ tests compile and pass **unchanged**. That includes the `best_discretization_factor(nullptr, 0, …)` calls and every call with a `std::vector<float>`: adding the `double` versions must not create ambiguous overloads.
-- [ ] The README documents the double versions, the Python dtype dispatch rule, the float32-vs-float64 difference (with the `[0.3]` example), and `unit_system=None` as the recommended choice when the unit system is unknown. The README example `best_discretization_factor([0.3]).factor  # 16777216` is corrected: a list is now float64, so it gives `10`.
-- [ ] `make check` and `make install && make test` pass.
+- [x] All existing C++ tests compile and pass **unchanged**. That includes the `best_discretization_factor(nullptr, 0, …)` calls and every call with a `std::vector<float>`: adding the `double` versions must not create ambiguous overloads.
+- [x] The README documents the double versions, the Python dtype dispatch rule, the float32-vs-float64 difference (with the `[0.3]` example), and `unit_system=None` as the recommended choice when the unit system is unknown. The README example `best_discretization_factor([0.3]).factor  # 16777216` is corrected: a list is now float64, so it gives `10`.
+- [x] `make check` and `make install && make test` pass.
 
 ## API
 
@@ -125,5 +125,5 @@ Resolved with the user while drafting:
 - Delivery: a new follow-up spec, not an amendment to best-factor-search.
 
 Remaining:
-- **Should `calculate_discretization_factor` and `discretize` also get float64 versions?** This spec leaves them out to keep the change focused. Adding them would change Python results for float64 and list inputs in many existing tests, for example the imperial factor for `[0.4, 1.6, -2.5]`. That would need its own regression list. Proposed as a follow-up spec.
+- **Should `calculate_discretization_factor` and `discretize` also get float64 versions?** **Answered at the start of `/implement-spec`: no, only `best_discretization_factor` in this run.** This spec leaves them out to keep the change focused. Adding them would change Python results for float64 and list inputs in many existing tests, for example the imperial factor for `[0.4, 1.6, -2.5]`. That would need its own regression list. Proposed as a follow-up spec.
 - **Order:** `/implement-spec` branches from `main`, so merge `feature/best-factor-search` into `main` first.

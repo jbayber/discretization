@@ -22,6 +22,10 @@ using discretization::UnitSystem;
 // other array-like (lists, float64, strided views) is converted once.
 using FloatArray = py::array_t<float, py::array::c_style | py::array::forcecast>;
 
+// Same, for the float64 path of `best_discretization_factor`: a contiguous float64 array is used
+// in place; other dtypes (float16, integers, lists of numbers) and strided views are converted once.
+using DoubleArray = py::array_t<double, py::array::c_style | py::array::forcecast>;
+
 // Accepts a `UnitSystem` or a case-insensitive "metric" / "imperial" string.
 UnitSystem parse_unit_system(const py::object &unit_system) {
   if (py::isinstance<UnitSystem>(unit_system))
@@ -70,8 +74,9 @@ py::array_t<int> discretize(const FloatArray &values, float epsilon, const py::o
   return out;
 }
 
-FactorResult best_discretization_factor(const FloatArray &values, const py::object &unit_system,
-                                        std::int64_t max_factor, int num_threads) {
+template <typename T>
+FactorResult RunBestFactor(const py::array_t<T, py::array::c_style | py::array::forcecast> &values,
+                           const py::object &unit_system, std::int64_t max_factor, int num_threads) {
   if (values.ndim() != 1)
     throw py::value_error("values must be one-dimensional");
   const std::optional<UnitSystem> system =
@@ -80,7 +85,7 @@ FactorResult best_discretization_factor(const FloatArray &values, const py::obje
     throw py::value_error("max_factor must be >= 1");
   // Every candidate is <= INT32_MAX, so a larger budget means "no budget".
   const int budget = static_cast<int>(std::min<std::int64_t>(max_factor, std::numeric_limits<int>::max()));
-  const float *data = values.data();
+  const T *data = values.data();
   const auto size = static_cast<std::size_t>(values.size());
   try {
     py::gil_scoped_release release;
@@ -89,6 +94,25 @@ FactorResult best_discretization_factor(const FloatArray &values, const py::obje
     // pybind11 would map std::out_of_range to IndexError.
     throw py::value_error(e.what());
   }
+}
+
+// Dispatches on the input's own dtype: float32 runs the float version (bit-identical to before),
+// everything else runs the double version on a float64 array, never narrowing to float32.
+FactorResult best_discretization_factor(const py::object &values, const py::object &unit_system,
+                                        std::int64_t max_factor, int num_threads) {
+  const auto array = py::array::ensure(values);
+  if (!array)
+    throw py::type_error("values must be a 1-D array-like of numbers");
+  if (py::isinstance<py::array_t<float>>(array)) {
+    const auto floats = FloatArray::ensure(array);
+    if (!floats)
+      throw py::type_error("values must be a 1-D array-like of numbers");
+    return RunBestFactor<float>(floats, unit_system, max_factor, num_threads);
+  }
+  const auto doubles = DoubleArray::ensure(array);
+  if (!doubles)
+    throw py::type_error("values must be a 1-D array-like of numbers");
+  return RunBestFactor<double>(doubles, unit_system, max_factor, num_threads);
 }
 
 } // namespace
@@ -126,5 +150,7 @@ PYBIND11_MODULE(_core, m) {
         py::arg("max_factor") = std::numeric_limits<int>::max(),
         py::arg("num_threads") = 0,
         "Return the candidate factor (up to `max_factor`) with the lowest mean absolute error, as a FactorResult.\n"
-        "`unit_system`: None (both lists), 'metric', 'imperial' or a UnitSystem. `num_threads`: 0 = auto.");
+        "`unit_system`: None (both lists, recommended when the unit system is unknown), 'metric', 'imperial' or a\n"
+        "UnitSystem. `num_threads`: 0 = auto. float32 input runs in float32; any other input (float64, lists,\n"
+        "float16, integers) runs in float64.");
 }
