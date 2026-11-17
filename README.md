@@ -2,13 +2,13 @@
 
 Tools to help discretizing with high accuracy a floating point problem.
 
-The core is a C++17 library. It is unit tested with [GoogleTest](https://github.com/google/googletest) and exposed to Python through [pybind11](https://github.com/pybind/pybind11), which is tested with [pytest](https://docs.pytest.org/). CMake builds everything. For Python, CMake is driven by [scikit-build-core](https://scikit-build-core.readthedocs.io/).
+The core is a C++20 library. It is unit tested with [GoogleTest](https://github.com/google/googletest) and exposed to Python through [pybind11](https://github.com/pybind/pybind11), which is tested with [pytest](https://docs.pytest.org/). CMake builds everything. For Python, CMake is driven by [scikit-build-core](https://scikit-build-core.readthedocs.io/).
 
 ## Requirements
 
 | Tool | Version | Used for |
 |---|---|---|
-| C++ compiler | C++17 (Clang, GCC or MSVC) | Building the library, its tests, and the Python extension |
+| C++ compiler | C++20 (Clang 10+, GCC 10+ or MSVC 2019 16.11+) | Building the library, its tests, and the Python extension |
 | [CMake](https://cmake.org/download/) | 3.20 or later | Build system. Optional: `uvx cmake` is used when it isn't installed. |
 | [uv](https://docs.astral.sh/uv/getting-started/installation/) | recent | Python versions, virtual environments, and packages |
 | Python | 3.9 or later (3.13 recommended) | Python bindings and tests. uv can install it for you. |
@@ -221,6 +221,65 @@ The Python functions call the raw-buffer C++ versions:
 
 Current behavior is a placeholder. The factor is always `1`. `discretize` rounds each value to the nearest integer, and rounds halfway cases away from zero (`2.5` → `3`, `-2.5` → `-3`).
 
+## Agent workflow
+
+Features can be built by [Claude Code](https://claude.com/claude-code) agents from a short spec. You describe what you want, which tests it needs, and the end goal. The agents plan, write the tests, implement, verify and review.
+
+### 1. Write a spec
+
+```
+/spec add a real calculate_discretization_factor: smallest power of 10 such that every value * factor is within epsilon of an integer
+```
+
+Claude asks a few targeted questions (acceptance criteria, required test kinds, constraints), then writes `specs/<slug>/spec.md`. You can also copy [specs/_template/spec.md](specs/_template/spec.md) and fill it in yourself. A spec has these sections:
+
+| Section | What you write |
+|---|---|
+| Goal | What you want, at a high level |
+| End goal / acceptance criteria | Checkable outcomes. The work is accepted only if all of them hold. |
+| API | New or changed functions, as precise as you like |
+| Required tests | Tick the kinds you need (C++ unit, Python unit, edge cases, property/accuracy, input types, benchmarks, regression) and say what each must cover |
+| Constraints / Out of scope | Limits the agents must respect |
+| Delivery | Commit on a branch, or also push and open a PR |
+
+### 2. Run it
+
+```
+/implement-spec specs/<slug>/spec.md
+```
+
+The orchestrator asks its questions once, up front, then runs without stopping:
+
+| Step | Agent ([.claude/agents/](.claude/agents/)) | Output |
+|---|---|---|
+| Check the spec, create `feature/<slug>`, confirm the baseline is green | orchestrator | Branch, committed spec |
+| Plan API changes, files, test cases and steps | `planner` (read-only) | `specs/<slug>/plan.md` |
+| Write the tests from the spec, before any implementation | `test-writer` | Failing tests, committed |
+| Implement until `make test` passes | `implementer` | Implementation |
+| Format and lint (clang-format, ruff) until `make check` passes, without changing behavior | `formatter` | Formatted code, committed with the implementation |
+| Review against the spec, conventions and numerical correctness, looping back to the implementer and formatter on blocking findings (max 3 rounds) | `reviewer` (read-only) | Review findings |
+| Final verification, report, optional push and PR | orchestrator | `specs/<slug>/report.md` |
+
+The test-writer and implementer are separate agents, so tests come from the spec, not from the code. The formatter runs on a smaller, cheaper model (Haiku): it only applies the project's formatters and fixes lint that can't change behavior, and reports anything else back to the implementer. Agents may never weaken or delete a test to make it pass.
+
+The run stops and asks you only if something blocks it: an ambiguous spec, a dirty working tree, a red baseline, a disputed test the spec doesn't settle, or review findings still open after 3 rounds.
+
+For an unattended run, switch Claude Code to accept-edits mode (Shift+Tab) before starting. Builds, tests, formatting and local git commands are pre-approved in [.claude/settings.json](.claude/settings.json). `git push` and `gh pr create` always ask, and force-push and `git reset --hard` are blocked.
+
+You can also call the formatter on its own at any time, for example when `make check` fails: ask Claude to "use the formatter agent".
+
+### How it's configured
+
+| File | Purpose |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Project rules every agent follows: commands, conventions, definition of done |
+| [.claude/agents/](.claude/agents/) | `planner`, `test-writer`, `implementer`, `formatter`, `reviewer` |
+| [.claude/skills/](.claude/skills/) | The `/spec` and `/implement-spec` commands |
+| [.claude/settings.json](.claude/settings.json) | Pre-approved commands, plus a hook that formats every file an agent edits |
+| [specs/](specs/) | One folder per feature: `spec.md` (yours), `plan.md` and `report.md` (written by the agents) |
+
+New C++ test files in `tests_cpp/` are picked up by CMake automatically, so agents don't need to edit `CMakeLists.txt` to add tests.
+
 ## Troubleshooting
 
 - **`cmake: command not found`**: install CMake (see [Setup](#1-install-the-tools)). `make test-cpp` falls back to `uvx cmake` automatically, but running CMake by hand needs `uvx cmake ...`.
@@ -242,6 +301,9 @@ tests_py/                                       Python unit tests (pytest, MAGE-
 CMakeLists.txt                                  C++ library, tests and Python extension
 pyproject.toml                                  Python package metadata, build backend, pytest/ruff configuration
 .clang-format                                   C++ formatting style
+.claude/                                        Claude Code agents, commands, settings and hooks
+CLAUDE.md                                       Rules for Claude Code agents
+specs/                                          Feature specs for the agent workflow (_template/spec.md)
 Makefile                                        install / format / lint / check / test targets
 ```
 
