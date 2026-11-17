@@ -10,3 +10,5 @@ dist/
 .ruff_cache/
 tmp/
 .coverage
+.benchmarks/
+.claude/settings.local.json
