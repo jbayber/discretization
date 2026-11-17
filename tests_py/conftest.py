@@ -68,3 +68,35 @@ def fits() -> Callable[[np.ndarray, int, float], bool]:
 def round_half_away() -> Callable[[np.ndarray], np.ndarray]:
     """Reference rounding with std::round semantics, as a fixture."""
     return round_half_away_from_zero
+
+
+@pytest.fixture(scope="session")
+def determinism_values() -> np.ndarray:
+    rng = np.random.default_rng(seed=Constants.DETERMINISM_SEED)
+    return rng.uniform(
+        Constants.PROPERTY_LOW, Constants.PROPERTY_HIGH, Constants.DETERMINISM_SIZE
+    ).astype(np.float32)
+
+
+@pytest.fixture(scope="session")
+def huge_values() -> np.ndarray:
+    rng = np.random.default_rng(seed=Constants.HUGE_SEED)
+    return rng.uniform(
+        Constants.HUGE_LOW, Constants.HUGE_HIGH, Constants.HUGE_SIZE
+    ).astype(np.float32)
+
+
+@pytest.fixture(scope="session")
+def mean_abs_error() -> Callable[[np.ndarray, int], float]:
+    """Reference mean absolute error of `values` discretized with `factor`.
+
+    float32 inputs converted to double, q = round(v * f) halfway away from
+    zero, err = mean(|q / f - v|).
+    """
+
+    def _mean_abs_error(values, factor: int) -> float:
+        v = np.asarray(values, dtype=np.float32).astype(np.float64)
+        q = round_half_away_from_zero(v * factor)
+        return float(np.mean(np.abs(q / factor - v)))
+
+    return _mean_abs_error
