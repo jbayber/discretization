@@ -138,11 +138,18 @@ FactorResult Reference(const std::vector<float> &values, std::optional<UnitSyste
 }
 
 std::vector<float> RandomValues(std::uint32_t seed, std::size_t size, float low, float high) {
+  // Portable on purpose, so the hardcoded expectations below hold on every platform:
+  // - std::mt19937's raw output is fixed by the standard, but
+  //   std::uniform_real_distribution is implementation-defined (libc++ and libstdc++
+  //   produce different values).
+  // - `low + (high - low) * u` may or may not be contracted into an FMA depending on
+  //   compiler and target (Apple clang on arm64 fuses it, GCC on x86-64 doesn't), so
+  //   the fused operation is spelled out with std::fma, which is exactly rounded.
+  // The top 24 bits of each draw give an exact float u in [0, 1).
   std::mt19937 gen{seed};
-  std::uniform_real_distribution<float> dist(low, high);
   std::vector<float> values(size);
   for (auto &v : values)
-    v = dist(gen);
+    v = std::fma(high - low, static_cast<float>(gen() >> 8) * 0x1p-24f, low);
   return values;
 }
 
@@ -560,8 +567,8 @@ INSTANTIATE_TEST_SUITE_P(BestFactor, BestFactorProperty,
                                          PropertyCase{kMetric, 1'000'000, 1'000'000, UnitSystem::Metric},
                                          PropertyCase{kImperial, 10, 9, UnitSystem::Imperial},
                                          PropertyCase{kImperial, 1000, 972, UnitSystem::Imperial},
-                                         PropertyCase{kImperial, 1'000'000, 524288, UnitSystem::Imperial},
+                                         PropertyCase{kImperial, 1'000'000, 786432, UnitSystem::Imperial},
                                          PropertyCase{kBoth, 10, 10, UnitSystem::Metric},
                                          PropertyCase{kBoth, 1000, 1000, UnitSystem::Metric},
-                                         PropertyCase{kBoth, 1'000'000, 524288, UnitSystem::Imperial}),
+                                         PropertyCase{kBoth, 1'000'000, 786432, UnitSystem::Imperial}),
                          PropertyName);

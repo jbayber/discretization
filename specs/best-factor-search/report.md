@@ -79,6 +79,19 @@ New function `best_discretization_factor(values, unit_system, max_factor, num_th
 - **Spawn observability:** a global spawn counter and `ResolveThreadCount` live in the internal header `cpp/src/discretization_internal.hpp`. The header is used only by the tests and is not part of the public API.
 - **Formatting step:** `make check` was already clean after the implementer, so I ran `make format` directly (no diff) instead of starting the formatter agent.
 
+## Post-delivery fix: CI failure on Linux
+
+`BestFactorProperty.MatchesBruteForceReference/{Imperial,Both}Budget1000000` failed on GitHub Actions (`ubuntu-latest`) and passed on macOS. Two causes made the C++ test data platform-dependent, while the expected-factor table was hardcoded from macOS data:
+
+1. `std::uniform_real_distribution<float>` is implementation-defined, so libc++ and libstdc++ produce different values from the same `mt19937` seed.
+2. `low + (high - low) * u` is contracted into an FMA by Apple clang on arm64 but not by GCC on x86-64. This changed 5290 of the 10 000 values.
+
+**Fix** (`RandomValues` in `tests_cpp/test_best_factor.cpp`): build each value from the raw `mt19937` output only, as `std::fma(high - low, float(gen() >> 8) * 0x1p-24f, low)`. The raw output is fixed by the standard, and the explicit `fma` is exactly rounded everywhere.
+
+The new data changes the budget-10⁶ winner for Imperial and Both from 524288 to **786432** (3·2¹⁸), which leads the runner-up by 17.5%. An independent NumPy reference on the same `mt19937` stream gives all 9 expected factors. The remaining 7 expectations are unchanged. The test keeps its full strength, with the hardcoded table and the exact comparison against the reference.
+
+`tests_cpp/test_property.cpp` (from unit-system-factors) also uses `uniform_real_distribution`. It only checks properties that hold for any data, so it is portable as is.
+
 ## Reviewer's minor findings (not addressed)
 
 1. `python/src/bindings.cpp:73-74`: `num_threads=2**40`, `max_factor=2**70` or `num_threads=1.5` raise `TypeError` (pybind11 argument conversion) instead of `ValueError`. The negative values the spec calls out do raise `ValueError`. Fix: take both as `py::int_` and range-check them.
