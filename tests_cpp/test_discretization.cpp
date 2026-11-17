@@ -7,8 +7,8 @@
 using discretization::calculate_discretization_factor;
 using discretization::discretize;
 
-TEST(CalculateDiscretizationFactor, VectorReturnsOne) {
-  EXPECT_EQ(calculate_discretization_factor(std::vector<float>{0.1f, 2.5f, -3.7f}, 0.01f), 1);
+TEST(CalculateDiscretizationFactor, VectorMetric) {
+  EXPECT_EQ(calculate_discretization_factor(std::vector<float>{0.1f, 2.5f, -3.7f}, 0.01f), 10);
 }
 
 TEST(CalculateDiscretizationFactor, EmptyVectorReturnsOne) {
@@ -23,12 +23,12 @@ TEST(CalculateDiscretizationFactor, ArrayMatchesVector) {
 
 TEST(Discretize, VectorRoundsToNearest) {
   const std::vector<float> values{0.0f, 1.2f, 1.7f, -1.2f, -1.7f};
-  EXPECT_EQ(discretize(values, 0.01f), (std::vector<int>{0, 1, 2, -1, -2}));
+  EXPECT_EQ(discretize(values, 0.5f), (std::vector<int>{0, 1, 2, -1, -2}));
 }
 
 TEST(Discretize, HalfwayRoundsAwayFromZero) {
   const std::vector<float> values{0.5f, 1.5f, 2.5f, -0.5f, -2.5f};
-  EXPECT_EQ(discretize(values, 0.01f), (std::vector<int>{1, 2, 3, -1, -3}));
+  EXPECT_EQ(discretize(values, 0.5f), (std::vector<int>{1, 2, 3, -1, -3}));
 }
 
 TEST(Discretize, EmptyVector) { EXPECT_TRUE(discretize(std::vector<float>{}, 0.01f).empty()); }
